@@ -17,7 +17,14 @@ CORS(app)
 !! NOTE THIS MUST BE UNCOMMENTED ON FIRST RUN
 !! Running this funciton will add one
 '''
-# db_drop_and_create_all()
+db_drop_and_create_all()
+
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,true')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
+
 
 # ROUTES
 '''
@@ -28,6 +35,14 @@ CORS(app)
     returns status code 200 and json {"success": True, "drinks": drinks} where drinks is the list of drinks
         or appropriate status code indicating reason for failure
 '''
+@app.route('/drinks')
+def get_drinks():
+    drinks = Drink.query.all()
+    
+    return jsonify({
+        "success": True,
+        "drinks": [drink.short() for drink in drinks]
+    }), 200
 
 
 '''
@@ -38,7 +53,16 @@ CORS(app)
     returns status code 200 and json {"success": True, "drinks": drinks} where drinks is the list of drinks
         or appropriate status code indicating reason for failure
 '''
-
+@app.route('/drinks-detail', methods=['GET'])
+@requires_auth('get:drinks-detail')
+def drinks_detail(payload):
+    drinks = Drink.query.all()
+    
+    return jsonify({
+        "success": True,
+        "drinks": [drink.long() for drink in drinks]
+    }), 200
+    
 
 '''
 @TODO implement endpoint
@@ -49,6 +73,31 @@ CORS(app)
     returns status code 200 and json {"success": True, "drinks": drink} where drink an array containing only the newly created drink
         or appropriate status code indicating reason for failure
 '''
+
+@app.route('/drinks', methods=['POST'])
+@requires_auth('post:drinks')
+def create_drink(payload):
+    body = request.get_json()
+
+    try:
+        req_recipe = body['recipe']
+        if isinstance(req_recipe, dict):
+            req_recipe = [req_recipe]
+
+        drink = Drink()
+        drink.title = body['title']
+        drink.recipe = json.dumps(req_recipe)  # convert object to a string
+        drink.insert()
+
+    except:
+        abort(400)
+
+    return jsonify({
+        'success': True, 
+        'drinks': [drink.long()]
+    })
+
+    
 
 
 '''
@@ -62,8 +111,27 @@ CORS(app)
     returns status code 200 and json {"success": True, "drinks": drink} where drink an array containing only the updated drink
         or appropriate status code indicating reason for failure
 '''
-
-
+@app.route('/drinks/<int:id>', methods=['PATCH'])
+@requires_auth('patch:drinks')
+def patch_drinks(payload, id):
+    body = request.get_json()
+    drinks = Drink.query.get_or_404(id)
+    
+    try:
+        # updated_title = body['title']
+        drinks.title = body['title']
+        drinks.recipe = json.dumps(body['recipe'])
+       
+        drinks.update()
+        
+    except:
+        abort(422)
+        
+    return jsonify({
+            "success": True,
+            "drinks": [drinks.long()]
+        }), 200
+    
 '''
 @TODO implement endpoint
     DELETE /drinks/<id>
@@ -75,7 +143,19 @@ CORS(app)
         or appropriate status code indicating reason for failure
 '''
 
+@app.route('/drinks/<int:id>', methods=['DELETE'])
+@requires_auth('delete:drinks')
+def delete_drink(payload, id):
+    drinks = Drink.query.get_or_404(id)
+    try:
+        drinks.delete()
 
+        return jsonify({
+            "success": True,
+            "delete": drinks.id
+        })
+    except:
+        abort(422)
 # Error Handling
 '''
 Example error handling for unprocessable entity
@@ -102,13 +182,28 @@ def unprocessable(error):
 
 '''
 
+
 '''
 @TODO implement error handler for 404
     error handler should conform to general task above
 '''
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({
+        "success": False,
+        "error": 404,
+        "message": "resource not found"
+    }), 404
 
 
 '''
 @TODO implement error handler for AuthError
     error handler should conform to general task above
 '''
+@app.errorhandler(AuthError)
+def unauthorized(auth_error):
+    return jsonify({
+        "success": False,
+        "error": auth_error.status_code,
+        "message": auth_error.error
+    })
