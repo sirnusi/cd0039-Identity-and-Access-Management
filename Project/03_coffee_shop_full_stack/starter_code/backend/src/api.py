@@ -19,12 +19,6 @@ CORS(app)
 '''
 db_drop_and_create_all()
 
-@app.after_request
-def after_request(response):
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,true')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-    return response
-
 
 # ROUTES
 '''
@@ -35,7 +29,7 @@ def after_request(response):
     returns status code 200 and json {"success": True, "drinks": drinks} where drinks is the list of drinks
         or appropriate status code indicating reason for failure
 '''
-@app.route('/drinks')
+@app.route('/drinks', methods=['GET'])
 def get_drinks():
     drinks = Drink.query.all()
     
@@ -58,6 +52,7 @@ def get_drinks():
 def drinks_detail(payload):
     drinks = Drink.query.all()
     
+
     return jsonify({
         "success": True,
         "drinks": [drink.long() for drink in drinks]
@@ -77,13 +72,13 @@ def drinks_detail(payload):
 @app.route('/drinks', methods=['POST'])
 @requires_auth('post:drinks')
 def create_drink(payload):
+    
     body = request.get_json()
 
     try:
         req_recipe = body['recipe']
         if isinstance(req_recipe, dict):
             req_recipe = [req_recipe]
-
         drink = Drink()
         drink.title = body['title']
         drink.recipe = json.dumps(req_recipe)  # convert object to a string
@@ -118,14 +113,19 @@ def patch_drinks(payload, id):
     drinks = Drink.query.get_or_404(id)
     
     try:
-        # updated_title = body['title']
-        drinks.title = body['title']
-        drinks.recipe = json.dumps(body['recipe'])
+        updated_title = body.get('title')
+        updated_recipe = body.get('recipe')
+        
+        if updated_title:
+            drinks.title = updated_title
+        if updated_recipe:
+            drinks.recipe = json.dumps(updated_recipe)
+        
        
         drinks.update()
         
     except:
-        abort(422)
+        abort(400)
         
     return jsonify({
             "success": True,
